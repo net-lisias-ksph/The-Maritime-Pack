@@ -1,0 +1,353 @@
+﻿/*********************************************************************************************
+* The Maritime Pack MPUtil plugin is copyright 2015 Fengist, all rights reserved.
+* For more information please visit http://www.kerbaltopia.com
+**********************************************************************************************/
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using UnityEngine;
+
+namespace MPUtils
+{
+    public class MPanimEngine : PartModule
+    {
+        [KSPField]
+        public string animationName = "null";  //the name of the animation stored in the .cfg
+
+        [KSPField]
+        public string partType = "null";  //the part type that it's connected to (Engine / Intake)
+
+        [KSPField]
+        public bool syncThrottle = false;  //is the animation synced to the throttle position
+
+        [KSPField]
+        public bool smoothThrottle = false; //should smoothing be used when the throttle position changes rapidly
+
+        public Animation aniEngine = null; //the animation
+        private ModuleEngines myEngine = new ModuleEngines();  //the first or default engine found in the part
+        private ModuleResourceIntake myIntake = new ModuleResourceIntake();
+        public float lastThrottle = 0;  //tracks the last throttle position. Always 0 or 1 for non sync'd engines
+        public bool faultFound = false;  //set to true if no engine or animation is found on the part
+        public string oldClip = "null";
+
+        [KSPEvent(active = false, guiActive = true, guiActiveUnfocused = true, guiActiveEditor = true, unfocusedRange = 5f, name = "Raise_Cover", guiName = "Raise Cover")]
+        public void Raise_Cover()
+        {
+            Events["Raise_Cover"].active = false;
+            try
+            {
+                Animation anim;
+                Animation[] animators = this.part.internalModel.FindModelAnimators("coverAnim");
+                if (animators.Length > 0)
+                {
+                    anim = animators[0];
+                    anim["coverAnim"].speed = 1f;
+                    anim["coverAnim"].normalizedTime = 0;
+                    anim.Play("coverAnim");
+                    Events["Lower_Cover"].active = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Events["Raise_Cover"].active = true;
+                Debug.Log("Exception trying to run the Raise_Cover animation");
+                Debug.Log("Err: " + ex);
+            }
+        }
+
+        [KSPEvent(active = false, guiActive = true, guiActiveUnfocused = true, guiActiveEditor = true, unfocusedRange = 5f, name = "Lower_Cover", guiName = "Lower Cover")]
+        public void Lower_Cover()
+        {
+            Events["Lower_Cover"].active = false;
+            try
+            {
+                Animation anim;
+                Animation[] animators = this.part.internalModel.FindModelAnimators("coverAnim");
+                if (animators.Length > 0)
+                {
+                    anim = animators[0];
+                    anim["coverAnim"].speed = -1f;
+                    anim["coverAnim"].normalizedTime = 1;
+                    anim.Play("coverAnim");
+                    Events["Raise_Cover"].active = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Events["Lower_Cover"].active = true;
+                Debug.Log("Exception trying to run the Lower_Cover animation");
+                Debug.Log("Err: " + ex);
+            }
+        }
+
+        public override void OnStart(StartState state)
+        {
+            foreach (var anim in part.FindModelAnimators(animationName))
+            {
+                aniEngine = anim;
+                if (aniEngine.GetClipCount() > 1)
+                {
+                    aniEngine.Stop();
+                }
+                print("[Maritime Pack] (aniEngine) Found animation: " + animationName);
+            }
+            if (partType == "Engine")
+            {
+                myEngine = this.part.Modules.OfType<ModuleEngines>().FirstOrDefault();
+            }
+            if (partType == "Intake")
+            {
+                myIntake = this.part.Modules.OfType<ModuleResourceIntake>().FirstOrDefault();
+            }
+        }
+
+        public void FixedUpdate()
+        {
+            if (faultFound || FlightGlobals.ActiveVessel == null) { return; }
+            if (aniEngine == null || myEngine == null && myIntake == null || animationName == "null")
+            {
+                if (aniEngine == null)
+                {
+                    print("[Maritime Pack] (aniEngine) Animation not found.");
+                }
+                else
+                {
+                    print("[Maritime Pack] (aniEngine) "+partType+" not found.");
+                }
+                faultFound = true;
+            }
+            else
+            {
+                aniEngine.clip = aniEngine.GetClip(animationName);
+                ScreenMessages.PostScreenMessage(new ScreenMessage("parttype "+partType+ " " + myIntake.intakeEnabled, 1f, ScreenMessageStyle.UPPER_RIGHT));
+                if ((partType == "Engine" && !myEngine.EngineIgnited) || (partType == "Intake" && !myIntake.intakeEnabled)) //Intake or Engine shut down, reverse animation
+                {
+                     if (lastThrottle != 0.0f)
+                    {
+                        if (syncThrottle)
+                        {
+                            if (smoothThrottle)
+                            {
+                                lastThrottle = lastThrottle - 0.02f;
+                                if (lastThrottle < 0.0f)
+                                {
+                                    lastThrottle = 0.0f;
+                                }
+                            }
+                            else
+                            {
+                                lastThrottle = 0.0f;
+                            }
+                            foreach (AnimationState state in aniEngine)
+                            {
+                                if (state.clip.name == animationName)
+                                {
+                                    state.normalizedTime = lastThrottle;
+                                    state.speed = 0.0f;
+                                }
+                            }
+                        }
+                        else
+                        {
+                         
+                            foreach (AnimationState state in aniEngine)
+                            {
+                                if (state.clip.name == animationName)
+                                {
+                                    state.speed = -1.0f;
+                                    state.normalizedTime = 1.0f;
+                                    lastThrottle = 0.0f;
+                                }
+                            }
+                        }
+                        aniEngine.Play(animationName);
+                    }
+                }
+                else //engine ignited, run animation
+                {
+                    if (syncThrottle)
+                    {
+                        if (smoothThrottle)
+                        {
+                            if (FlightInputHandler.state.mainThrottle > lastThrottle)
+                            {
+                                if (FlightInputHandler.state.mainThrottle + lastThrottle > 0.02f)
+                                {
+                                    lastThrottle = lastThrottle + 0.02f;
+                                    if (lastThrottle > 1.0f)
+                                    {
+                                        lastThrottle = 1.0f;
+                                    }
+                                }
+                                else
+                                {
+                                    lastThrottle = FlightInputHandler.state.mainThrottle;
+                                }
+                            }
+                            if (FlightInputHandler.state.mainThrottle < lastThrottle)
+                            {
+                                if (lastThrottle - FlightInputHandler.state.mainThrottle > 0.02f || FlightInputHandler.state.mainThrottle == 0 && lastThrottle != 0)
+                                {
+                                    lastThrottle = lastThrottle - 0.02f;
+                                    if (lastThrottle < 0.0f)
+                                    {
+                                        lastThrottle = 0.0f;
+                                    }
+                                }
+                                else
+                                {
+                                    lastThrottle = FlightInputHandler.state.mainThrottle;
+                                }
+                            }
+                        }
+                        foreach (AnimationState state in aniEngine)
+                        {
+                            if (state.clip.name == animationName)
+                            {
+                                state.speed = 0.0f;
+                                state.normalizedTime = FlightInputHandler.state.mainThrottle;
+                                if (smoothThrottle)
+                                {
+                                    state.normalizedTime = lastThrottle;
+                                }
+                            }
+                        }
+                        aniEngine.Play(animationName);
+                    }
+                    else
+                    {
+                        if (!aniEngine.isPlaying && lastThrottle != 1.0f)
+                        {
+                            
+                            foreach (AnimationState state in aniEngine)
+                            {
+                                if (state.clip.name == animationName)
+                                {
+                                    if (state.time != 1.0f)
+                                    {
+                                        state.speed = 1.0f;
+                                        state.normalizedTime = 0.0f;
+                                        aniEngine.Play();
+                                        lastThrottle = 1.0f;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+    public class MPSub : PartModule
+    {
+        [KSPField]
+        public bool manageIntakes = false;
+
+        [KSPField]
+        public bool manageThrottle = false;
+
+        public override void OnStart(StartState state)
+        {
+            Debug.Log("[Maritime Pack]Sub Found");
+            FSSubRoutines.SubFound = true;
+            FSSubRoutines.manageIntakes = manageIntakes;
+            if (manageIntakes)
+            {
+                Debug.Log("[Maritime Pack]Intakes Enabled");
+            }
+            FSSubRoutines.manageThrottle = manageThrottle;
+            if (manageThrottle)
+            {
+                Debug.Log("[Maritime Pack]Engines Enabled");
+            }
+        }
+    }
+
+    [KSPAddon(KSPAddon.Startup.Flight, false)]
+    public class FSSubRoutines : MonoBehaviour
+    {
+        public static bool SubFound = false;
+        public static bool manageIntakes = false;
+        public static bool manageThrottle = false;
+        public bool intakesOpen = true;
+        public bool hasSplashed = false;
+        public bool checkOnce = false;
+
+        public void FixedUpdate()
+        {
+            if (!checkOnce)
+            {
+                if (FlightGlobals.ActiveVessel.situation == Vessel.Situations.SPLASHED)
+                {
+                    hasSplashed = true;
+                    checkOnce = true;
+                }
+            }
+            if (!hasSplashed && (!SubFound || FlightGlobals.ActiveVessel == null))
+            {
+                return;
+            }
+            //Close Intakes
+            if (manageIntakes)
+            {
+                if (FlightGlobals.ActiveVessel.altitude <= -1.0)
+                {
+                    if (intakesOpen)
+                    {
+                        for (int p = FlightGlobals.ActiveVessel.Parts.Count - 1; p >= 0; --p)
+                        {
+                            for (int i = FlightGlobals.ActiveVessel.Parts[p].Modules.Count - 1; i >= 0; --i)
+                            {
+                                PartModule m = FlightGlobals.ActiveVessel.Parts[p].Modules[i];
+                                if (m is ModuleResourceIntake)
+                                {
+                                    (m as ModuleResourceIntake).enabled = false;
+                                    (m as ModuleResourceIntake).Deactivate();
+                                    intakesOpen = false;
+                                    Debug.Log("[Maritime Pack]Closing Intakes");
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    if (!intakesOpen)
+                    {
+                        for (int p = FlightGlobals.ActiveVessel.Parts.Count - 1; p >= 0; --p)
+                        {
+                            for (int i = FlightGlobals.ActiveVessel.Parts[p].Modules.Count - 1; i >= 0; --i)
+                            {
+                                PartModule m = FlightGlobals.ActiveVessel.Parts[p].Modules[i];
+                                if (m is ModuleResourceIntake)
+                                {
+                                    (m as ModuleResourceIntake).enabled = true;
+                                    (m as ModuleResourceIntake).Activate();
+                                    intakesOpen = true;
+                                    Debug.Log("[Maritime Pack]Opening Intakes");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            //end Close Intakes
+            //Engine Shutdown
+            if (manageThrottle)
+            {
+                if (FlightGlobals.ActiveVessel.altitude > 2.0)
+                {
+                    Debug.Log("[Maritime Pack]Shutting Down Engine");
+                    FlightGlobals.ActiveVessel.ctrlState.mainThrottle = 0;
+                }
+                //end Engine Shutdown
+            }
+        }
+    }
+}
+

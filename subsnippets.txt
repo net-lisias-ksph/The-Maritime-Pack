@@ -1,0 +1,82 @@
+                        Vector3 CoP = FlightGlobals.ActiveVessel.findLocalCenterOfPressure();
+                        if (!endrough)
+                        {
+                            decimal totaldistance = decimal.Round((decimal)Vector3.Distance(Part1.transform.position, CoP) + (decimal)Vector3.Distance(Part2.transform.position, CoP), 2);
+                            decimal totalmass = decimal.Round((decimal)MPFunctions.GetResourceAmount(Part1, "CompressedWater") + (decimal)MPFunctions.GetResourceAmount(Part2, "CompressedWater"), 2);
+                            decimal P1length = decimal.Round((decimal)Vector3.Distance(Part1.transform.position, CoP), 2);
+                            //decimal P2length = decimal.Round((decimal)Vector3.Distance(Part2.transform.position, ActiveFlightCamera), 2);
+                            decimal MassU = decimal.Round(totalmass / totaldistance, 2);
+                            decimal p1goal = decimal.Round(MassU * P1length, 2);
+                            //decimal p2goal = decimal.Round(MassU * P2length, 2);
+                            //decimal goaltotal = decimal.Round(p1goal + p2goal, 2);
+                            decimal p1difference = decimal.Round(p1goal - (decimal)MPFunctions.GetResourceAmount(Part1, "CompressedWater"), 2);
+                            int id = MPFunctions.GetResourceID(Part1, "CompressedWater");
+                            //MPLog.Writelog("TD: " + totaldistance + " TM: " + totalmass + " p1goal: " + p1goal + " p2goal: " + p2goal + " totalgoal: " + goaltotal);
+                            MPLog.Writelog(" p1difference: " + p1difference + " P1amt: " + MPFunctions.GetResourceAmount(Part1, "CompressedWater") + " P2amt: " + MPFunctions.GetResourceAmount(Part2, "CompressedWater"));
+                            MPLog.Writelog("P1 CoM distance: " + Vector3.Distance(Part1.transform.position, CoP) + MPFunctions.GetResourceAmount(Part1, "CompressedWater") + " P2 CoM distance: " + Vector3.Distance(Part2.transform.position, CoP) + MPFunctions.GetResourceAmount(Part2, "CompressedWater"));
+                            if (MPFunctions.GetResourceAmount(Part2, "CompressedWater") > (float)p1difference && MPFunctions.GetResourceSpace(Part1, "CompressedWater") > (float)p1difference)
+                            {
+                                Part1.TransferResource(id, (float) p1difference);
+                                Part2.TransferResource(id, (float)-p1difference);
+                            }
+                            else
+                            {
+                                MPLog.Writelog("[Maritime Pack] Unable to transfer resources.");
+                                Events["ActivateEvent"].active = true;
+                                Events["DeactivateEvent"].active = false;
+                            }
+                            if ((float)p1difference < 0.05f && (float)p1difference > -0.05f)
+                            {
+                                endrough = true;
+                                Events["ActivateEvent"].active = true;
+                                Events["DeactivateEvent"].active = false;
+                            }
+                        }
+
+                        /*                     
+                        MPLog.Writelog("P1 Distance: " + Vector3.Distance(Part1.transform.position, FlightGlobals.ActiveVessel.CoM));
+                        MPLog.Writelog("P2 Distance: " + Vector3.Distance(Part2.transform.position, FlightGlobals.ActiveVessel.CoM));
+                        MPLog.Writelog("pitch: " + FlightGlobals.ActiveVessel.ctrlState.pitch);
+                       alt1 = MPFunctions.findAltitude(Part1.transform);
+                       alt2 = MPFunctions.findAltitude(Part2.transform);
+                       MPLog.Writelog("[Maritime Pack] Autokeel Running" + alt1 + " " + alt2);
+                       if (alt1 > alt2)
+                        {
+                            if (MPFunctions.GetResourceAmount(Part2, "CompressedWater") > transferamount && MPFunctions.GetResourceSpace(Part1, "CompressedWater") > transferamount)
+                            {
+                                int id = MPFunctions.GetResourceID(Part1, "CompressedWater");
+                                Part2.TransferResource(id, -transferamount);
+                                Part1.TransferResource(id, transferamount);
+                            }
+                            else
+                            {
+                                MPLog.Writelog("[Maritime Pack] Unable to transfer resources.");
+                                Events["ActivateEvent"].active = true;
+                                Events["DeactivateEvent"].active = false;
+                            }
+                        }
+                        if (alt1 < alt2)
+                        {
+                            if (MPFunctions.GetResourceAmount(Part1, "CompressedWater") > transferamount && MPFunctions.GetResourceSpace(Part2, "CompressedWater") > transferamount)
+                            {
+                                int id = MPFunctions.GetResourceID(Part1, "CompressedWater");
+                                Part1.TransferResource(id, -transferamount);
+                                Part2.TransferResource(id, transferamount);
+                                MPLog.Writelog("[Maritime Pack] Moving to Part2 ");
+                            }
+                            else
+                            {
+                                MPLog.Writelog("[Maritime Pack] Unable to transfer resources.");
+                                Events["ActivateEvent"].active = true;
+                                Events["DeactivateEvent"].active = false;
+                            }
+
+                        }
+                        if (alt2 == alt1)
+                        {
+                            MPLog.Writelog("[Maritime Pack] Shut Down: "+ alt1 +" "+ alt2);
+                            Events["ActivateEvent"].active = true;
+                            Events["DeactivateEvent"].active = false;
+                        }
+                    */
+                   }
